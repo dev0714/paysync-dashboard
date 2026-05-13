@@ -613,8 +613,8 @@ function dashboard() {
     loadingCreds: false,
     credsError: null,
     savingCred: false,
-    res: {},
-    loading: {},
+    res: { tx:null, cu:null, pl:null, su:null, tr:null, rf:null, ch:null, mx:null },
+    loading: { tx:false, cu:false, pl:false, su:false, tr:false, rf:false, ch:false, mx:false },
 
     tabs: [
       {id:'credentials',label:'🔑 Credentials'},
@@ -773,15 +773,15 @@ function dashboard() {
 
     async call(key, fn, action, qp = {}, body = null) {
       if (!this.credentialId || !this.apiKey) {
-        this.res = { ...this.res, [key]: { error: 'No credential selected. Pick one from the Active Credential dropdown in the top bar.' } }
+        this.res[key] = { error: 'No credential selected — pick one from the Active Credential dropdown.' }
         return
       }
       if (!this.url) {
-        this.res = { ...this.res, [key]: { error: 'Supabase URL is not set.' } }
+        this.res[key] = { error: 'Supabase URL is not set.' }
         return
       }
-      this.loading = { ...this.loading, [key]: true }
-      this.res = { ...this.res, [key]: null }
+      this.loading[key] = true
+      this.res[key] = null
       try {
         const base = this.url.replace(/\/$/, '')
         const u = new URL(`${base}/functions/v1/${fn}`)
@@ -791,10 +791,10 @@ function dashboard() {
         if (body) opts.body = JSON.stringify(body)
         const r = await fetch(u.toString(), opts)
         const text = await r.text()
-        try { this.res = { ...this.res, [key]: JSON.parse(text) } }
-        catch { this.res = { ...this.res, [key]: { error: `Non-JSON response (${r.status}): ${text.slice(0, 300)}` } } }
-      } catch(e) { this.res = { ...this.res, [key]: { error: e.message } } }
-      this.loading = { ...this.loading, [key]: false }
+        try { this.res[key] = JSON.parse(text) }
+        catch { this.res[key] = { error: `Non-JSON response (${r.status}): ${text.slice(0, 300)}` } }
+      } catch(e) { this.res[key] = { error: e.message } }
+      this.loading[key] = false
     },
 
     // ── Transaction dispatcher ──────────────────────────────────────────────
