@@ -156,14 +156,13 @@
 
     try {
       const fnBase = supaUrl.replace('https://', 'https://').replace(/\/$/, '')
-      const r = await fetch(`${fnBase}/functions/v1/paystack-transaction`, {
-        method: 'POST',
+      const r = await fetch(`${fnBase}/functions/v1/paystack-transaction?action=verify&reference=${encodeURIComponent(ref)}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'x-credential-id': credId,
           'x-credential-key': apiKey,
         },
-        body: JSON.stringify({ action: 'verify', reference: ref })
       })
 
       const d = await r.json()
