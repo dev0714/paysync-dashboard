@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Callback — Paystack</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; line-height: 1.6; font-family: 'Courier New', monospace; }
+    .json-key  { color: #60a5fa }
+    .json-str  { color: #4ade80 }
+    .json-num  { color: #fb923c }
+    .json-bool { color: #f472b6 }
+    .json-null { color: #94a3b8 }
+  </style>
+</head>
+<body>
+<div id="app" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">
+  <div style="width:100%;max-width:560px">
+
+    <!-- Header -->
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="color:#00C3F7;font-size:22px;font-weight:700;margin-bottom:4px">⚡ Paystack</div>
+      <div id="subtitle" style="color:#64748b;font-size:13px">Verifying payment...</div>
+    </div>
+
+    <!-- Status card -->
+    <div id="card" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:28px;text-align:center">
+
+      <!-- Spinner -->
+      <div id="spinner" style="margin:0 auto 16px;width:40px;height:40px;border:3px solid #334155;border-top-color:#00C3F7;border-radius:50%;animation:spin .8s linear infinite"></div>
+      <div id="status-text" style="color:#94a3b8;font-size:13px">Please wait...</div>
+
+      <!-- Result (hidden until done) -->
+      <div id="result" style="display:none">
+        <div id="icon" style="font-size:48px;margin-bottom:12px"></div>
+        <div id="status-label" style="font-size:18px;font-weight:700;margin-bottom:6px"></div>
+        <div id="status-msg" style="color:#64748b;font-size:13px;margin-bottom:20px"></div>
+
+        <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:14px;text-align:left;margin-bottom:20px">
+          <div style="font-size:10px;color:#475569;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Transaction Details</div>
+          <table id="detail-table" style="width:100%;font-size:12px;border-collapse:collapse"></table>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <a id="back-btn" href="index.html" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:600;text-decoration:none">← Back to Dashboard</a>
+          <button onclick="copyRef()" style="background:#00C3F7;color:#000;border:none;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer">Copy Reference</button>
+        </div>
+      </div>
+
+      <!-- Error (hidden until done) -->
+      <div id="error-box" style="display:none">
+        <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+        <div style="color:#fca5a5;font-size:16px;font-weight:600;margin-bottom:8px">Verification Failed</div>
+        <div id="error-msg" style="color:#64748b;font-size:12px;margin-bottom:20px"></div>
+        <div style="display:flex;gap:10px;justify-content:center">
+          <a href="index.html" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:600;text-decoration:none">← Back to Dashboard</a>
+          <button onclick="retry()" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer">Retry</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Raw response toggle -->
+    <div id="raw-section" style="display:none;margin-top:16px">
+      <button onclick="toggleRaw()" style="background:transparent;border:none;color:#475569;font-size:11px;cursor:pointer;padding:0">▶ Show raw response</button>
+      <div id="raw-box" style="display:none;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px;margin-top:8px;max-height:320px;overflow-y:auto">
+        <pre id="raw-pre"></pre>
+      </div>
+    </div>
+
+    <!-- No ref warning -->
+    <div id="no-ref" style="display:none;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:28px;text-align:center">
+      <div style="font-size:40px;margin-bottom:12px">🔍</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:8px;color:#e2e8f0">No reference found</div>
+      <div style="color:#64748b;font-size:12px;margin-bottom:20px">This page expects a <code style="background:#0f172a;padding:2px 6px;border-radius:3px;color:#00C3F7">?reference=xxx</code> query param from Paystack.</div>
+      <a href="index.html" style="background:#00C3F7;color:#000;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:600;text-decoration:none">← Back to Dashboard</a>
+    </div>
+
+  </div>
+</div>
+
+<style>
+  @keyframes spin { to { transform: rotate(360deg) } }
+</style>
+
+<script>
+  const params   = new URLSearchParams(location.search)
+  const ref      = params.get('reference') || params.get('trxref')
+  const supaUrl  = localStorage.getItem('ps_url')  || 'https://tiughuzuskasaaursjcs.supabase.co'
+  const credId   = localStorage.getItem('ps_cred_id')
+  const apiKey   = localStorage.getItem('ps_api_key')
+
+  let rawData = null
+
+  function row(label, value, valueStyle = '') {
+    return `<tr>
+      <td style="color:#475569;padding:4px 0;vertical-align:top;white-space:nowrap;padding-right:16px">${label}</td>
+      <td style="color:#e2e8f0;padding:4px 0;${valueStyle}">${value ?? '—'}</td>
+    </tr>`
+  }
+
+  function fmt(amount, currency) {
+    if (amount == null) return '—'
+    return `${currency || ''} ${(amount / 100).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`
+  }
+
+  function highlight(json) {
+    return JSON.stringify(json, null, 2)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, m => {
+        if (/^"/.test(m)) return /:$/.test(m) ? `<span class="json-key">${m}</span>` : `<span class="json-str">${m}</span>`
+        if (/true|false/.test(m)) return `<span class="json-bool">${m}</span>`
+        if (/null/.test(m)) return `<span class="json-null">${m}</span>`
+        return `<span class="json-num">${m}</span>`
+      })
+  }
+
+  function copyRef() {
+    navigator.clipboard.writeText(ref).then(() => {
+      const b = document.querySelector('[onclick="copyRef()"]')
+      b.textContent = 'Copied!'
+      setTimeout(() => b.textContent = 'Copy Reference', 1500)
+    })
+  }
+
+  function toggleRaw() {
+    const box = document.getElementById('raw-box')
+    const btn = document.querySelector('[onclick="toggleRaw()"]')
+    const shown = box.style.display !== 'none'
+    box.style.display = shown ? 'none' : 'block'
+    btn.textContent = (shown ? '▶' : '▼') + ' Show raw response'
+  }
+
+  function showError(msg) {
+    document.getElementById('spinner').style.display = 'none'
+    document.getElementById('status-text').style.display = 'none'
+    document.getElementById('error-msg').textContent = msg
+    document.getElementById('error-box').style.display = 'block'
+    document.getElementById('subtitle').textContent = 'Verification failed'
+  }
+
+  function retry() { location.reload() }
+
+  async function verify() {
+    if (!ref) {
+      document.getElementById('card').style.display = 'none'
+      document.getElementById('no-ref').style.display = 'block'
+      return
+    }
+
+    if (!credId || !apiKey) {
+      showError('No active credential found. Open the dashboard, select a credential, then retry.')
+      return
+    }
+
+    try {
+      const fnBase = supaUrl.replace('https://', 'https://').replace(/\/$/, '')
+      const r = await fetch(`${fnBase}/functions/v1/paystack-transaction`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-credential-id': credId,
+          'x-credential-key': apiKey,
+        },
+        body: JSON.stringify({ action: 'verify', reference: ref })
+      })
+
+      const d = await r.json()
+      rawData = d
+
+      document.getElementById('raw-pre').innerHTML = highlight(d)
+      document.getElementById('raw-section').style.display = 'block'
+
+      if (!r.ok || !d.status) {
+        showError(d.message || d.error || 'Paystack returned an error')
+        return
+      }
+
+      const tx = d.data
+      const success = tx.status === 'success'
+
+      document.getElementById('spinner').style.display = 'none'
+      document.getElementById('status-text').style.display = 'none'
+      document.getElementById('result').style.display = 'block'
+      document.getElementById('subtitle').textContent = success ? 'Payment verified' : 'Payment not successful'
+
+      document.getElementById('icon').textContent  = success ? '✅' : '❌'
+      document.getElementById('status-label').textContent = success ? 'Payment Successful' : `Payment ${tx.status}`
+      document.getElementById('status-label').style.color = success ? '#4ade80' : '#fca5a5'
+      document.getElementById('status-msg').textContent = success
+        ? `${fmt(tx.amount, tx.currency)} received from ${tx.customer?.email || '—'}`
+        : `Status: ${tx.status}`
+
+      document.getElementById('detail-table').innerHTML = [
+        row('Reference',   tx.reference),
+        row('Amount',      fmt(tx.amount, tx.currency)),
+        row('Status',      tx.status, success ? 'color:#4ade80' : 'color:#fca5a5'),
+        row('Channel',     tx.channel),
+        row('Customer',    tx.customer?.email),
+        row('Paid at',     tx.paid_at ? new Date(tx.paid_at).toLocaleString() : '—'),
+        row('Gateway ref', tx.gateway_response),
+      ].join('')
+
+    } catch (e) {
+      showError(e.message || 'Network error — could not reach edge function')
+    }
+  }
+
+  verify()
+</script>
+</body>
+</html>

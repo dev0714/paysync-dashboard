@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paystack Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak]{display:none!important}
+    body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:#0f172a}
+    ::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+    input,select,textarea{background:#0f172a;border:1px solid #334155;border-radius:6px;padding:6px 10px;color:#e2e8f0;font-size:12px;width:100%;outline:none;transition:border-color .15s}
+    input:focus,select:focus,textarea:focus{border-color:#00C3F7}
+    select option{background:#1e293b}
+    label{font-size:10px;color:#64748b;margin-bottom:3px;display:block;text-transform:uppercase;letter-spacing:.05em}
+    .card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}
+    .btn{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity .15s;display:inline-flex;align-items:center;gap:6px}
+    .btn:hover{opacity:.85}
+    .btn:disabled{opacity:.4;cursor:not-allowed}
+    .btn-primary{background:#00C3F7;color:#000}
+    .btn-sm{padding:4px 10px;font-size:11px}
+    .btn-ghost{background:#1e293b;color:#94a3b8;border:1px solid #334155}
+    .btn-danger{background:transparent;color:#ef4444;border:1px solid #374151}
+    .btn-success{background:transparent;color:#22c55e;border:1px solid #374151}
+    .pill{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid #334155;color:#64748b;background:transparent;transition:all .15s;white-space:nowrap}
+    .pill.active{background:#00C3F7;color:#000;border-color:#00C3F7;font-weight:700}
+    .tab{padding:10px 16px;font-size:12px;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s}
+    .tab:hover{color:#94a3b8}
+    .tab.active{color:#00C3F7;border-bottom-color:#00C3F7}
+    .badge-sandbox{background:#0c4a6e;color:#7dd3fc;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600}
+    .badge-live{background:#450a0a;color:#fca5a5;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600}
+    .badge-active{background:#14532d;color:#86efac;padding:2px 7px;border-radius:4px;font-size:10px}
+    .badge-inactive{background:#1f2937;color:#6b7280;padding:2px 7px;border-radius:4px;font-size:10px}
+    .json-key{color:#60a5fa}
+    .json-str{color:#4ade80}
+    .json-num{color:#fb923c}
+    .json-bool{color:#f472b6}
+    .json-null{color:#94a3b8}
+    pre{white-space:pre-wrap;word-break:break-all;font-size:11px;line-height:1.6;font-family:'Courier New',monospace}
+    .field{margin-bottom:10px}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .response-box{background:#0f172a;border:1px solid #334155;border-radius:6px;padding:12px;min-height:120px;max-height:420px;overflow-y:auto}
+    .copied{color:#22c55e!important}
+  </style>
+</head>
+<body x-data="dashboard()" x-init="init()" x-cloak>
+
+<!-- ── TOP BAR ─────────────────────────────────────────────────────────────── -->
+<div style="background:#0a1120;border-bottom:1px solid #1e293b;padding:10px 20px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:50">
+  <div style="color:#00C3F7;font-weight:700;font-size:15px;white-space:nowrap;flex-shrink:0">⚡ Paystack</div>
+
+  <div style="flex:2;min-width:0">
+    <label>Supabase URL</label>
+    <input type="text" x-model="url" @change="save()" placeholder="https://xxx.supabase.co" style="padding:4px 8px">
+  </div>
+
+  <div style="flex:2;min-width:0">
+    <label>Service Role Key</label>
+    <input type="password" x-model="srk" @change="save();loadCreds()" placeholder="eyJ..." style="padding:4px 8px">
+  </div>
+
+  <div style="flex:2;min-width:0">
+    <label>Active Credential</label>
+    <select x-model="activeCred" @change="onCredSelect()" style="padding:4px 8px">
+      <option value="">— select —</option>
+      <template x-for="c in credentials" :key="c.id">
+        <option :value="c.id" x-text="`${c.name} (${c.environment})`"></option>
+      </template>
+    </select>
+  </div>
+
+  <div style="flex-shrink:0;padding-top:14px">
+    <template x-if="connected">
+      <span style="background:#14532d;color:#86efac;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:600">● Connected</span>
+    </template>
+    <template x-if="!connected">
+      <span style="background:#1f2937;color:#6b7280;border-radius:6px;padding:5px 12px;font-size:11px">○ Not connected</span>
+    </template>
+  </div>
+</div>
+
+<!-- ── TAB BAR ────────────────────────────────────────────────────────────── -->
+<div style="background:#0a1120;border-bottom:1px solid #1e293b;padding:0 20px;display:flex;gap:0;overflow-x:auto">
+  <template x-for="t in tabs" :key="t.id">
+    <button class="tab" :class="{active: tab===t.id}" @click="tab=t.id" x-text="t.label"></button>
+  </template>
+</div>
+
+<!-- ── CONTENT ────────────────────────────────────────────────────────────── -->
+<div style="padding:20px;max-width:1200px;margin:0 auto">
+
+  <!-- CREDENTIALS ──────────────────────────────────────────────────────────── -->
+  <div x-show="tab==='credentials'">
+    <div style="display:grid;grid-template-columns:340px 1fr;gap:16px">
+
+      <!-- Add form -->
+      <div class="card">
+        <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:14px">Add Credential</div>
+        <div class="field"><label>Name</label><input x-model="nc.name" placeholder="My Project — Sandbox"></div>
+        <div class="field">
+          <label>Environment</label>
+          <select x-model="nc.environment">
+            <option value="sandbox">Sandbox</option>
+            <option value="live">Live</option>
+          </select>
+        </div>
+        <div class="field"><label>Secret Key</label><input x-model="nc.secret_key" type="password" placeholder="sk_test_..."></div>
+        <div class="field"><label>Public Key</label><input x-model="nc.public_key" placeholder="pk_test_..."></div>
+        <div class="field"><label>Webhook Secret <span style="color:#475569">(optional)</span></label><input x-model="nc.webhook_secret" type="password" placeholder="whsec_..."></div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center" @click="addCred()" :disabled="savingCred || !nc.name || !nc.secret_key">
+          <span x-show="savingCred">Adding...</span>
+          <span x-show="!savingCred">Add Credential</span>
+        </button>
+      </div>
+
+      <!-- List -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div style="font-size:13px;font-weight:600;color:#e2e8f0">All Credentials</div>
+          <button class="btn btn-ghost btn-sm" @click="loadCreds()">↻ Refresh</button>
+        </div>
+        <template x-if="loadingCreds">
+          <div style="color:#475569;font-size:12px;text-align:center;padding:20px">Loading...</div>
+        </template>
+        <template x-if="credsError">
+          <div style="background:#450a0a;border:1px solid #7f1d1d;border-radius:6px;padding:10px;margin-bottom:8px;font-size:11px;color:#fca5a5">
+            <div style="font-weight:600;margin-bottom:4px">API Error:</div>
+            <pre x-text="credsError" style="color:#fca5a5;font-size:10px"></pre>
+          </div>
+        </template>
+        <template x-if="!loadingCreds && credentials.length === 0 && !credsError">
+          <div style="color:#475569;font-size:12px;text-align:center;padding:20px">No credentials yet. Add one.</div>
+        </template>
+        <template x-for="c in credentials" :key="c.id">
+          <div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:12px;margin-bottom:8px" :style="activeCred===c.id ? 'border-color:#00C3F7' : ''">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:12px;font-weight:600;color:#e2e8f0" x-text="c.name"></span>
+                <span :class="c.environment==='sandbox' ? 'badge-sandbox' : 'badge-live'" x-text="c.environment"></span>
+                <span :class="c.is_active ? 'badge-active' : 'badge-inactive'" x-text="c.is_active ? 'active' : 'inactive'"></span>
+              </div>
+              <button class="btn btn-ghost btn-sm" @click="activeCred=c.id;onCredSelect()" x-show="activeCred!==c.id" style="font-size:10px">Use this</button>
+              <span x-show="activeCred===c.id" style="font-size:10px;color:#00C3F7;font-weight:600">● Selected</span>
+            </div>
+            <div style="font-size:10px;color:#475569;margin-bottom:8px;font-family:monospace" x-text="'ID: ' + c.id"></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" @click="copyText(c.id,$el)">📋 Copy ID</button>
+              <button class="btn btn-ghost btn-sm" @click="copyText(c.api_key,$el)">🔑 Copy API Key</button>
+              <button class="btn btn-ghost btn-sm" @click="copyText(c.public_key,$el)">🔓 Copy Pub Key</button>
+              <button :class="c.is_active ? 'btn btn-danger btn-sm' : 'btn btn-success btn-sm'" @click="toggleActive(c)">
+                <span x-text="c.is_active ? 'Deactivate' : 'Activate'"></span>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Env vars helper -->
+    <div class="card" style="margin-top:16px" x-show="activeCred">
+      <div style="font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:10px">Website .env.local — copy these into any Next.js project</div>
+      <pre style="color:#4ade80" x-text="envVars()"></pre>
+    </div>
+  </div>
+
+  <!-- TRANSACTIONS ─────────────────────────────────────────────────────────── -->
+  <div x-show="tab==='transactions'">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <template x-for="a in ['initialize','verify','list','fetch','charge_auth','check_auth','totals']" :key="a">
+        <button class="pill" :class="{active:action.transactions===a}" @click="action.transactions=a" x-text="a"></button>
+      </template>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <!-- initialize -->
+        <div x-show="action.transactions==='initialize'">
+          <div class="form-grid">
+            <div class="field"><label>Email *</label><input x-model="f.tx_init.email" placeholder="test@example.com"></div>
+            <div class="field"><label>Amount (cents) *</label><input x-model="f.tx_init.amount" type="number" placeholder="10000"></div>
+            <div class="field"><label>Currency</label><select x-model="f.tx_init.currency"><option>ZAR</option><option>NGN</option><option>GHS</option><option>USD</option><option>KES</option></select></div>
+            <div class="field"><label>Reference (optional)</label><input x-model="f.tx_init.reference" placeholder="auto-generated"></div>
+          </div>
+          <div class="field"><label>Callback URL (optional)</label><input x-model="f.tx_init.callback_url" placeholder="https://yoursite.com/payment/complete"></div>
+          <button class="btn btn-primary" @click="txSend()" :disabled="loading.tx">
+            <span x-text="loading.tx ? 'Sending...' : 'Send Request →'"></span>
+          </button>
+        </div>
+        <!-- verify -->
+        <div x-show="action.transactions==='verify'">
+          <div class="field"><label>Reference *</label><input x-model="f.tx_verify.reference" placeholder="trx_ref_abc123"></div>
+          <button class="btn btn-primary" @click="txSend()" :disabled="loading.tx"><span x-text="loading.tx?'Sending...':'Send →'"></span></button>
+        </div>
+        <!-- list -->
+        <div x-show="action.transactions==='list'">
+          <div class="form-grid">
+            <div class="field"><label>Per Page</label><input x-model="f.tx_list.perPage" type="number" placeholder="50"></div>
+            <div class="field"><label>Page</label><input x-model="f.tx_list.page" type="number" placeholder="1"></div>
+            <div class="field"><label>Status</label><select x-model="f.tx_list.status"><option value="">All</option><option>success</option><option>failed</option><option>abandoned</option></select></div>
+            <div class="field"><label>Customer ID (optional)</label><input x-model="f.tx_list.customer" placeholder="CUS_xxx"></div>
+          </div>
+          <button class="btn btn-primary" @click="txSend()" :disabled="loading.tx"><span x-text="loading.tx?'Sending...':'Send →'"></span></button>
+        </div>
+        <!-- fetch -->
+        <div x-show="action.transactions==='fetch'">
+          <div class="field"><label>Transaction ID *</label><input x-model="f.tx_fetch.id" placeholder="123456789"></div>
+          <button class="btn btn-primary" @click="txSend()" :disabled="loading.tx"><span x-text="loading.tx?'Sending...':'Send →'"></span></button>
+        </div>
+        <!-- charge_auth -->
+        <div x-show="action.transactions==='charge_auth'">
+          <div class="field"><label>Email *</label><input x-model="f.tx_cauth.email" placeholder="customer@example.com"></div>
+          <div class="field"><label>Amount (cents) *</label><input x-model="f.tx_cauth.amount" type="number"></div>
+          <div class="field"><label>Authorization Code *</label><input x-model="f.tx_cauth.authorization_code" placeholder="AUTH_xxx"></div>
+          <button class="btn btn-primary" @click="txSend()" :disabled="loading.tx"><span x-text="loading.tx?'Sending...':'Send →'"></span></button>
+        </div>
+        <!-- check_auth -->
+        <div x-show="action.transactions==='check_auth'">
+          <div class="field"><label>Email *</label><input x-model="f.tx_cauth.email" placeholder="customer@example.com"></div>
+          <div class="field"><label>Amount (cents) *</label><input x-model="f.tx_cauth.amount" type="number"></div>
+          <div class="field"><label>Authorization Code *</label><input x-model="f.tx_cauth.authorization_code" placeholder="AUTH_xxx"></div>
+          <button class="btn btn-primary" @click="txSend()" :disabled="loading.tx"><span x-text="loading.tx?'Sending...':'Send →'"></span></button>
+        </div>
+        <!-- totals -->
+        <div x-show="action.transactions==='totals'">
+          <div style="color:#64748b;font-size:12px;margin-bottom:12px">No parameters required.</div>
+          <button class="btn btn-primary" @click="txSend()" :disabled="loading.tx"><span x-text="loading.tx?'Sending...':'Send →'"></span></button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:#475569;margin-bottom:8px">RESPONSE</div>
+        <div class="response-box">
+          <template x-if="loading.tx"><div style="color:#64748b;font-size:12px">Waiting...</div></template>
+          <template x-if="!loading.tx && res.tx"><pre x-html="fmt(res.tx)"></pre></template>
+          <template x-if="!loading.tx && !res.tx"><div style="color:#334155;font-size:12px">Response will appear here</div></template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOMERS ────────────────────────────────────────────────────────────── -->
+  <div x-show="tab==='customers'">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <template x-for="a in ['create','fetch','list','update','set_risk_action']" :key="a">
+        <button class="pill" :class="{active:action.customers===a}" @click="action.customers=a" x-text="a"></button>
+      </template>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div x-show="action.customers==='create'">
+          <div class="form-grid">
+            <div class="field"><label>Email *</label><input x-model="f.cu_create.email" placeholder="customer@example.com"></div>
+            <div class="field"><label>Phone</label><input x-model="f.cu_create.phone" placeholder="+27821234567"></div>
+            <div class="field"><label>First Name</label><input x-model="f.cu_create.first_name"></div>
+            <div class="field"><label>Last Name</label><input x-model="f.cu_create.last_name"></div>
+          </div>
+          <button class="btn btn-primary" @click="cuSend()" :disabled="loading.cu"><span x-text="loading.cu?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.customers==='fetch'">
+          <div class="field"><label>Email or Customer Code *</label><input x-model="f.cu_fetch.identifier" placeholder="customer@example.com or CUS_xxx"></div>
+          <button class="btn btn-primary" @click="cuSend()" :disabled="loading.cu"><span x-text="loading.cu?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.customers==='list'">
+          <div class="form-grid">
+            <div class="field"><label>Per Page</label><input x-model="f.cu_list.perPage" type="number" placeholder="50"></div>
+            <div class="field"><label>Page</label><input x-model="f.cu_list.page" type="number" placeholder="1"></div>
+          </div>
+          <button class="btn btn-primary" @click="cuSend()" :disabled="loading.cu"><span x-text="loading.cu?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.customers==='update'">
+          <div class="field"><label>Customer Code *</label><input x-model="f.cu_update.code" placeholder="CUS_xxx"></div>
+          <div class="form-grid">
+            <div class="field"><label>First Name</label><input x-model="f.cu_update.first_name"></div>
+            <div class="field"><label>Last Name</label><input x-model="f.cu_update.last_name"></div>
+            <div class="field"><label>Phone</label><input x-model="f.cu_update.phone"></div>
+          </div>
+          <button class="btn btn-primary" @click="cuSend()" :disabled="loading.cu"><span x-text="loading.cu?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.customers==='set_risk_action'">
+          <div class="field"><label>Customer Code or Email *</label><input x-model="f.cu_risk.customer" placeholder="CUS_xxx"></div>
+          <div class="field"><label>Risk Action *</label><select x-model="f.cu_risk.risk_action"><option value="allow">allow (whitelist)</option><option value="deny">deny (blacklist)</option><option value="default">default</option></select></div>
+          <button class="btn btn-primary" @click="cuSend()" :disabled="loading.cu"><span x-text="loading.cu?'Sending...':'Send →'"></span></button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:#475569;margin-bottom:8px">RESPONSE</div>
+        <div class="response-box">
+          <template x-if="loading.cu"><div style="color:#64748b;font-size:12px">Waiting...</div></template>
+          <template x-if="!loading.cu && res.cu"><pre x-html="fmt(res.cu)"></pre></template>
+          <template x-if="!loading.cu && !res.cu"><div style="color:#334155;font-size:12px">Response will appear here</div></template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLANS ────────────────────────────────────────────────────────────────── -->
+  <div x-show="tab==='plans'">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <template x-for="a in ['create','list','fetch','update']" :key="a">
+        <button class="pill" :class="{active:action.plans===a}" @click="action.plans=a" x-text="a"></button>
+      </template>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div x-show="action.plans==='create'">
+          <div class="form-grid">
+            <div class="field"><label>Plan Name *</label><input x-model="f.pl_create.name" placeholder="Monthly Basic"></div>
+            <div class="field"><label>Amount (cents) *</label><input x-model="f.pl_create.amount" type="number" placeholder="5000"></div>
+            <div class="field"><label>Interval *</label><select x-model="f.pl_create.interval"><option>daily</option><option>weekly</option><option>monthly</option><option>annually</option></select></div>
+            <div class="field"><label>Currency</label><select x-model="f.pl_create.currency"><option>ZAR</option><option>NGN</option><option>GHS</option><option>USD</option></select></div>
+          </div>
+          <button class="btn btn-primary" @click="plSend()" :disabled="loading.pl"><span x-text="loading.pl?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.plans==='list'">
+          <div class="field"><label>Per Page</label><input x-model="f.pl_list.perPage" type="number" placeholder="50"></div>
+          <button class="btn btn-primary" @click="plSend()" :disabled="loading.pl"><span x-text="loading.pl?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.plans==='fetch'">
+          <div class="field"><label>Plan ID or Code *</label><input x-model="f.pl_fetch.id" placeholder="PLN_xxx or 12345"></div>
+          <button class="btn btn-primary" @click="plSend()" :disabled="loading.pl"><span x-text="loading.pl?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.plans==='update'">
+          <div class="field"><label>Plan ID or Code *</label><input x-model="f.pl_update.id" placeholder="PLN_xxx"></div>
+          <div class="form-grid">
+            <div class="field"><label>Name</label><input x-model="f.pl_update.name"></div>
+            <div class="field"><label>Amount (cents)</label><input x-model="f.pl_update.amount" type="number"></div>
+          </div>
+          <button class="btn btn-primary" @click="plSend()" :disabled="loading.pl"><span x-text="loading.pl?'Sending...':'Send →'"></span></button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:#475569;margin-bottom:8px">RESPONSE</div>
+        <div class="response-box">
+          <template x-if="loading.pl"><div style="color:#64748b;font-size:12px">Waiting...</div></template>
+          <template x-if="!loading.pl && res.pl"><pre x-html="fmt(res.pl)"></pre></template>
+          <template x-if="!loading.pl && !res.pl"><div style="color:#334155;font-size:12px">Response will appear here</div></template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUBSCRIPTIONS ────────────────────────────────────────────────────────── -->
+  <div x-show="tab==='subscriptions'">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <template x-for="a in ['sub_create','sub_fetch','sub_list','sub_enable','sub_disable','sub_manage_link']" :key="a">
+        <button class="pill" :class="{active:action.subscriptions===a}" @click="action.subscriptions=a" x-text="a.replace('sub_','')"></button>
+      </template>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div x-show="action.subscriptions==='sub_create'">
+          <div class="field"><label>Customer Code or Email *</label><input x-model="f.su_create.customer" placeholder="CUS_xxx"></div>
+          <div class="field"><label>Plan Code *</label><input x-model="f.su_create.plan" placeholder="PLN_xxx"></div>
+          <div class="field"><label>Authorization Code (optional)</label><input x-model="f.su_create.authorization" placeholder="AUTH_xxx"></div>
+          <button class="btn btn-primary" @click="suSend()" :disabled="loading.su"><span x-text="loading.su?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.subscriptions==='sub_fetch'">
+          <div class="field"><label>Subscription ID or Code *</label><input x-model="f.su_fetch.id" placeholder="SUB_xxx or 12345"></div>
+          <button class="btn btn-primary" @click="suSend()" :disabled="loading.su"><span x-text="loading.su?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.subscriptions==='sub_list'">
+          <div class="form-grid">
+            <div class="field"><label>Per Page</label><input x-model="f.su_list.perPage" type="number" placeholder="50"></div>
+            <div class="field"><label>Customer</label><input x-model="f.su_list.customer" placeholder="CUS_xxx (optional)"></div>
+          </div>
+          <button class="btn btn-primary" @click="suSend()" :disabled="loading.su"><span x-text="loading.su?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.subscriptions==='sub_enable'">
+          <div class="field"><label>Subscription Code *</label><input x-model="f.su_toggle.code" placeholder="SUB_xxx"></div>
+          <div class="field"><label>Email Token *</label><input x-model="f.su_toggle.token" placeholder="(from subscription object)"></div>
+          <button class="btn btn-primary" @click="suSend()" :disabled="loading.su"><span x-text="loading.su?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.subscriptions==='sub_disable'">
+          <div class="field"><label>Subscription Code *</label><input x-model="f.su_toggle.code" placeholder="SUB_xxx"></div>
+          <div class="field"><label>Email Token *</label><input x-model="f.su_toggle.token" placeholder="(from subscription object)"></div>
+          <button class="btn btn-primary" @click="suSend()" :disabled="loading.su"><span x-text="loading.su?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.subscriptions==='sub_manage_link'">
+          <div class="field"><label>Subscription ID or Code *</label><input x-model="f.su_fetch.id" placeholder="SUB_xxx"></div>
+          <button class="btn btn-primary" @click="suSend()" :disabled="loading.su"><span x-text="loading.su?'Sending...':'Send →'"></span></button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:#475569;margin-bottom:8px">RESPONSE</div>
+        <div class="response-box">
+          <template x-if="loading.su"><div style="color:#64748b;font-size:12px">Waiting...</div></template>
+          <template x-if="!loading.su && res.su"><pre x-html="fmt(res.su)"></pre></template>
+          <template x-if="!loading.su && !res.su"><div style="color:#334155;font-size:12px">Response will appear here</div></template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSFERS ────────────────────────────────────────────────────────────── -->
+  <div x-show="tab==='transfers'">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <template x-for="a in ['recipient_create','recipient_list','recipient_fetch','initiate','finalize','list','fetch','verify']" :key="a">
+        <button class="pill" :class="{active:action.transfers===a}" @click="action.transfers=a" x-text="a"></button>
+      </template>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div x-show="action.transfers==='recipient_create'">
+          <div class="form-grid">
+            <div class="field"><label>Type *</label><select x-model="f.rc_create.type"><option value="nuban">nuban (Nigeria)</option><option value="ghipss">ghipss (Ghana)</option><option value="mobile_money">mobile_money</option><option value="basa">basa (SA)</option></select></div>
+            <div class="field"><label>Currency *</label><select x-model="f.rc_create.currency"><option>NGN</option><option>GHS</option><option>ZAR</option><option>USD</option></select></div>
+            <div class="field" style="grid-column:1/-1"><label>Account Name *</label><input x-model="f.rc_create.name" placeholder="John Doe"></div>
+            <div class="field"><label>Account Number *</label><input x-model="f.rc_create.account_number" placeholder="0000000000"></div>
+            <div class="field"><label>Bank Code *</label><input x-model="f.rc_create.bank_code" placeholder="057"></div>
+          </div>
+          <button class="btn btn-primary" @click="trSend()" :disabled="loading.tr"><span x-text="loading.tr?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.transfers==='recipient_list'">
+          <div class="field"><label>Per Page</label><input x-model="f.rc_list.perPage" type="number" placeholder="50"></div>
+          <button class="btn btn-primary" @click="trSend()" :disabled="loading.tr"><span x-text="loading.tr?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.transfers==='recipient_fetch'">
+          <div class="field"><label>Recipient ID or Code *</label><input x-model="f.rc_fetch.id" placeholder="RCP_xxx or 12345"></div>
+          <button class="btn btn-primary" @click="trSend()" :disabled="loading.tr"><span x-text="loading.tr?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.transfers==='initiate'">
+          <div class="form-grid">
+            <div class="field"><label>Amount (cents) *</label><input x-model="f.tr_initiate.amount" type="number"></div>
+            <div class="field"><label>Recipient Code *</label><input x-model="f.tr_initiate.recipient" placeholder="RCP_xxx"></div>
+          </div>
+          <div class="field"><label>Reason</label><input x-model="f.tr_initiate.reason" placeholder="Payout for order #123"></div>
+          <button class="btn btn-primary" @click="trSend()" :disabled="loading.tr"><span x-text="loading.tr?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.transfers==='finalize'">
+          <div class="field"><label>Transfer Code *</label><input x-model="f.tr_finalize.transfer_code" placeholder="TRF_xxx"></div>
+          <div class="field"><label>OTP *</label><input x-model="f.tr_finalize.otp" placeholder="123456"></div>
+          <button class="btn btn-primary" @click="trSend()" :disabled="loading.tr"><span x-text="loading.tr?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.transfers==='list'">
+          <div class="field"><label>Per Page</label><input x-model="f.tr_list.perPage" type="number" placeholder="50"></div>
+          <button class="btn btn-primary" @click="trSend()" :disabled="loading.tr"><span x-text="loading.tr?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.transfers==='fetch'">
+          <div class="field"><label>Transfer ID or Code *</label><input x-model="f.tr_fetch.id" placeholder="TRF_xxx or 12345"></div>
+          <button class="btn btn-primary" @click="trSend()" :disabled="loading.tr"><span x-text="loading.tr?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.transfers==='verify'">
+          <div class="field"><label>Reference *</label><input x-model="f.tr_verify.reference" placeholder="transfer_ref_xxx"></div>
+          <button class="btn btn-primary" @click="trSend()" :disabled="loading.tr"><span x-text="loading.tr?'Sending...':'Send →'"></span></button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:#475569;margin-bottom:8px">RESPONSE</div>
+        <div class="response-box">
+          <template x-if="loading.tr"><div style="color:#64748b;font-size:12px">Waiting...</div></template>
+          <template x-if="!loading.tr && res.tr"><pre x-html="fmt(res.tr)"></pre></template>
+          <template x-if="!loading.tr && !res.tr"><div style="color:#334155;font-size:12px">Response will appear here</div></template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REFUNDS ──────────────────────────────────────────────────────────────── -->
+  <div x-show="tab==='refunds'">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <template x-for="a in ['create','list','fetch']" :key="a">
+        <button class="pill" :class="{active:action.refunds===a}" @click="action.refunds=a" x-text="a"></button>
+      </template>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div x-show="action.refunds==='create'">
+          <div class="field"><label>Transaction ID or Reference *</label><input x-model="f.rf_create.transaction" placeholder="trx_ref_xxx or 123456"></div>
+          <div class="field"><label>Amount (cents) — leave blank to refund in full</label><input x-model="f.rf_create.amount" type="number" placeholder="leave blank for full refund"></div>
+          <div class="field"><label>Customer Note</label><input x-model="f.rf_create.customer_note" placeholder="Refund for cancelled order"></div>
+          <div class="field"><label>Merchant Note</label><input x-model="f.rf_create.merchant_note" placeholder="Internal reason"></div>
+          <button class="btn btn-primary" @click="rfSend()" :disabled="loading.rf"><span x-text="loading.rf?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.refunds==='list'">
+          <div class="form-grid">
+            <div class="field"><label>Per Page</label><input x-model="f.rf_list.perPage" type="number" placeholder="50"></div>
+            <div class="field"><label>From Date</label><input x-model="f.rf_list.from" type="date"></div>
+            <div class="field"><label>To Date</label><input x-model="f.rf_list.to" type="date"></div>
+          </div>
+          <button class="btn btn-primary" @click="rfSend()" :disabled="loading.rf"><span x-text="loading.rf?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.refunds==='fetch'">
+          <div class="field"><label>Refund ID *</label><input x-model="f.rf_fetch.id" placeholder="12345"></div>
+          <button class="btn btn-primary" @click="rfSend()" :disabled="loading.rf"><span x-text="loading.rf?'Sending...':'Send →'"></span></button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:#475569;margin-bottom:8px">RESPONSE</div>
+        <div class="response-box">
+          <template x-if="loading.rf"><div style="color:#64748b;font-size:12px">Waiting...</div></template>
+          <template x-if="!loading.rf && res.rf"><pre x-html="fmt(res.rf)"></pre></template>
+          <template x-if="!loading.rf && !res.rf"><div style="color:#334155;font-size:12px">Response will appear here</div></template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHARGE ───────────────────────────────────────────────────────────────── -->
+  <div x-show="tab==='charge'">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <template x-for="a in ['charge','submit_pin','submit_otp','submit_phone','submit_birthday','check']" :key="a">
+        <button class="pill" :class="{active:action.charge===a}" @click="action.charge=a" x-text="a"></button>
+      </template>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div x-show="action.charge==='charge'">
+          <div class="form-grid">
+            <div class="field"><label>Email *</label><input x-model="f.ch_charge.email" placeholder="customer@example.com"></div>
+            <div class="field"><label>Amount (cents) *</label><input x-model="f.ch_charge.amount" type="number" placeholder="10000"></div>
+            <div class="field"><label>Card Number *</label><input x-model="f.ch_charge.card_number" placeholder="4084084084084081"></div>
+            <div class="field"><label>CVV *</label><input x-model="f.ch_charge.cvv" placeholder="408" maxlength="4"></div>
+            <div class="field"><label>Expiry Month *</label><input x-model="f.ch_charge.expiry_month" placeholder="01" maxlength="2"></div>
+            <div class="field"><label>Expiry Year *</label><input x-model="f.ch_charge.expiry_year" placeholder="25" maxlength="2"></div>
+          </div>
+          <div style="background:#0c4a6e;border-radius:6px;padding:8px;font-size:11px;color:#7dd3fc;margin-bottom:10px">
+            💡 Test card: 4084084084084081 / CVV: 408 / Expiry: 01/25 / PIN: 0000 / OTP: 123456
+          </div>
+          <button class="btn btn-primary" @click="chSend()" :disabled="loading.ch"><span x-text="loading.ch?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.charge==='submit_pin'">
+          <div class="field"><label>PIN *</label><input x-model="f.ch_pin.pin" placeholder="0000" maxlength="4"></div>
+          <div class="field"><label>Reference *</label><input x-model="f.ch_pin.reference" placeholder="(from charge response)"></div>
+          <button class="btn btn-primary" @click="chSend()" :disabled="loading.ch"><span x-text="loading.ch?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.charge==='submit_otp'">
+          <div class="field"><label>OTP *</label><input x-model="f.ch_otp.otp" placeholder="123456"></div>
+          <div class="field"><label>Reference *</label><input x-model="f.ch_otp.reference" placeholder="(from charge response)"></div>
+          <button class="btn btn-primary" @click="chSend()" :disabled="loading.ch"><span x-text="loading.ch?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.charge==='submit_phone'">
+          <div class="field"><label>Phone *</label><input x-model="f.ch_phone.phone" placeholder="+2348012345678"></div>
+          <div class="field"><label>Reference *</label><input x-model="f.ch_phone.reference" placeholder="(from charge response)"></div>
+          <button class="btn btn-primary" @click="chSend()" :disabled="loading.ch"><span x-text="loading.ch?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.charge==='submit_birthday'">
+          <div class="field"><label>Birthday *</label><input x-model="f.ch_birthday.birthday" type="date"></div>
+          <div class="field"><label>Reference *</label><input x-model="f.ch_birthday.reference" placeholder="(from charge response)"></div>
+          <button class="btn btn-primary" @click="chSend()" :disabled="loading.ch"><span x-text="loading.ch?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.charge==='check'">
+          <div class="field"><label>Reference *</label><input x-model="f.ch_check.reference" placeholder="trx_ref_xxx"></div>
+          <button class="btn btn-primary" @click="chSend()" :disabled="loading.ch"><span x-text="loading.ch?'Sending...':'Send →'"></span></button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:#475569;margin-bottom:8px">RESPONSE</div>
+        <div class="response-box">
+          <template x-if="loading.ch"><div style="color:#64748b;font-size:12px">Waiting...</div></template>
+          <template x-if="!loading.ch && res.ch"><pre x-html="fmt(res.ch)"></pre></template>
+          <template x-if="!loading.ch && !res.ch"><div style="color:#334155;font-size:12px">Response will appear here</div></template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MISC ─────────────────────────────────────────────────────────────────── -->
+  <div x-show="tab==='misc'">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <template x-for="a in ['list_banks','list_countries','resolve_account','list_states','list_currencies']" :key="a">
+        <button class="pill" :class="{active:action.misc===a}" @click="action.misc=a" x-text="a"></button>
+      </template>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div x-show="action.misc==='list_banks'">
+          <div class="field"><label>Country</label><select x-model="f.mx_banks.country"><option value="nigeria">Nigeria</option><option value="ghana">Ghana</option><option value="south africa">South Africa</option><option value="kenya">Kenya</option><option value="rwanda">Rwanda</option></select></div>
+          <button class="btn btn-primary" @click="mxSend()" :disabled="loading.mx"><span x-text="loading.mx?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.misc==='list_countries'">
+          <div style="color:#64748b;font-size:12px;margin-bottom:12px">No parameters required.</div>
+          <button class="btn btn-primary" @click="mxSend()" :disabled="loading.mx"><span x-text="loading.mx?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.misc==='resolve_account'">
+          <div class="field"><label>Account Number *</label><input x-model="f.mx_resolve.account_number" placeholder="0000000000"></div>
+          <div class="field"><label>Bank Code *</label><input x-model="f.mx_resolve.bank_code" placeholder="057"></div>
+          <button class="btn btn-primary" @click="mxSend()" :disabled="loading.mx"><span x-text="loading.mx?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.misc==='list_states'">
+          <div class="field"><label>Country Code *</label><input x-model="f.mx_states.country" placeholder="NG"></div>
+          <button class="btn btn-primary" @click="mxSend()" :disabled="loading.mx"><span x-text="loading.mx?'Sending...':'Send →'"></span></button>
+        </div>
+        <div x-show="action.misc==='list_currencies'">
+          <div style="color:#64748b;font-size:12px;margin-bottom:12px">No parameters required.</div>
+          <button class="btn btn-primary" @click="mxSend()" :disabled="loading.mx"><span x-text="loading.mx?'Sending...':'Send →'"></span></button>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:11px;color:#475569;margin-bottom:8px">RESPONSE</div>
+        <div class="response-box">
+          <template x-if="loading.mx"><div style="color:#64748b;font-size:12px">Waiting...</div></template>
+          <template x-if="!loading.mx && res.mx"><pre x-html="fmt(res.mx)"></pre></template>
+          <template x-if="!loading.mx && !res.mx"><div style="color:#334155;font-size:12px">Response will appear here</div></template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<script>
+function dashboard() {
+  return {
+    url: localStorage.getItem('ps_url') || 'https://tiughuzuskasaaursjcs.supabase.co',
+    srk: localStorage.getItem('ps_srk') || '',
+    credentialId: localStorage.getItem('ps_cred_id') || '',
+    apiKey: localStorage.getItem('ps_api_key') || '',
+    activeCred: localStorage.getItem('ps_active_cred') || '',
+    connected: false,
+    tab: 'credentials',
+    credentials: [],
+    loadingCreds: false,
+    credsError: null,
+    savingCred: false,
+    res: {},
+    loading: {},
+
+    tabs: [
+      {id:'credentials',label:'🔑 Credentials'},
+      {id:'transactions',label:'💳 Transactions'},
+      {id:'customers',label:'👤 Customers'},
+      {id:'plans',label:'📋 Plans'},
+      {id:'subscriptions',label:'🔁 Subscriptions'},
+      {id:'transfers',label:'💸 Transfers'},
+      {id:'refunds',label:'↩ Refunds'},
+      {id:'charge',label:'⚡ Charge'},
+      {id:'misc',label:'🏦 Misc'},
+    ],
+
+    action: {
+      transactions:'initialize', customers:'create', plans:'create',
+      subscriptions:'sub_create', transfers:'recipient_create',
+      refunds:'create', charge:'charge', misc:'list_banks',
+    },
+
+    nc: { name:'', environment:'sandbox', secret_key:'', public_key:'', webhook_secret:'' },
+
+    f: {
+      tx_init:   { email:'test@example.com', amount:'10000', currency:'ZAR', reference:'', callback_url: (() => { const b = location.origin + location.pathname.replace(/[^/]*$/, ''); return b + 'callback.html'; })() },
+      tx_verify: { reference:'' },
+      tx_list:   { perPage:'50', page:'1', status:'', customer:'' },
+      tx_fetch:  { id:'' },
+      tx_cauth:  { email:'', amount:'', authorization_code:'' },
+      cu_create: { email:'', first_name:'', last_name:'', phone:'' },
+      cu_fetch:  { identifier:'' },
+      cu_list:   { perPage:'50', page:'1' },
+      cu_update: { code:'', first_name:'', last_name:'', phone:'' },
+      cu_risk:   { customer:'', risk_action:'allow' },
+      pl_create: { name:'', interval:'monthly', amount:'', currency:'ZAR' },
+      pl_list:   { perPage:'50' },
+      pl_fetch:  { id:'' },
+      pl_update: { id:'', name:'', amount:'' },
+      su_create: { customer:'', plan:'', authorization:'' },
+      su_fetch:  { id:'' },
+      su_list:   { perPage:'50', customer:'' },
+      su_toggle: { code:'', token:'' },
+      rc_create: { type:'nuban', name:'', account_number:'', bank_code:'', currency:'NGN' },
+      rc_list:   { perPage:'50' },
+      rc_fetch:  { id:'' },
+      tr_initiate:{ amount:'', recipient:'', reason:'', source:'balance' },
+      tr_finalize:{ transfer_code:'', otp:'' },
+      tr_list:   { perPage:'50' },
+      tr_fetch:  { id:'' },
+      tr_verify: { reference:'' },
+      rf_create: { transaction:'', amount:'', customer_note:'', merchant_note:'' },
+      rf_list:   { perPage:'50', from:'', to:'' },
+      rf_fetch:  { id:'' },
+      ch_charge: { email:'', amount:'', card_number:'', cvv:'', expiry_month:'', expiry_year:'' },
+      ch_pin:    { pin:'', reference:'' },
+      ch_otp:    { otp:'', reference:'' },
+      ch_phone:  { phone:'', reference:'' },
+      ch_birthday:{ birthday:'', reference:'' },
+      ch_check:  { reference:'' },
+      mx_banks:  { country:'nigeria' },
+      mx_resolve:{ account_number:'', bank_code:'' },
+      mx_states: { country:'NG' },
+    },
+
+    init() {
+      this.connected = !!(this.url && this.srk)
+      if (this.srk) this.loadCreds()
+    },
+
+    save() {
+      localStorage.setItem('ps_url', this.url)
+      localStorage.setItem('ps_srk', this.srk)
+      localStorage.setItem('ps_cred_id', this.credentialId)
+      localStorage.setItem('ps_api_key', this.apiKey)
+      localStorage.setItem('ps_active_cred', this.activeCred)
+      this.connected = !!(this.url && this.srk)
+    },
+
+    sbH() {
+      return {
+        'apikey': this.srk,
+        'Authorization': 'Bearer ' + this.srk,
+        'Accept-Profile': 'paystack',
+        'Content-Profile': 'paystack',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+      }
+    },
+
+    fnH() {
+      return {
+        'x-credential-id': this.credentialId,
+        'x-credential-key': this.apiKey,
+        'Content-Type': 'application/json',
+      }
+    },
+
+    async loadCreds() {
+      this.loadingCreds = true
+      this.credsError = null
+      try {
+        const r = await fetch(`${this.url}/rest/v1/credentials?order=created_at.desc&select=*`, { headers: this.sbH() })
+        const d = await r.json()
+        if (!r.ok) { this.credsError = JSON.stringify(d, null, 2); this.credentials = []; this.connected = false; this.loadingCreds = false; return }
+        this.credentials = Array.isArray(d) ? d : []
+        this.connected = true
+        // restore selected cred
+        if (this.activeCred) {
+          const c = this.credentials.find(x => x.id === this.activeCred)
+          if (c) { this.credentialId = c.id; this.apiKey = c.api_key }
+        }
+      } catch(e) { this.connected = false; this.credsError = e.message }
+      this.loadingCreds = false
+    },
+
+    async addCred() {
+      this.savingCred = true
+      try {
+        const r = await fetch(`${this.url}/rest/v1/credentials`, {
+          method: 'POST', headers: this.sbH(), body: JSON.stringify(this.nc)
+        })
+        const d = await r.json()
+        const row = Array.isArray(d) ? d[0] : d
+        if (row?.id) {
+          this.credentials.unshift(row)
+          this.nc = { name:'', environment:'sandbox', secret_key:'', public_key:'', webhook_secret:'' }
+        }
+      } catch(e) {}
+      this.savingCred = false
+    },
+
+    async toggleActive(cred) {
+      const r = await fetch(`${this.url}/rest/v1/credentials?id=eq.${cred.id}`, {
+        method: 'PATCH', headers: this.sbH(), body: JSON.stringify({ is_active: !cred.is_active })
+      })
+      const d = await r.json()
+      const row = Array.isArray(d) ? d[0] : null
+      if (row) { const i = this.credentials.findIndex(c => c.id === cred.id); if (i >= 0) this.credentials[i] = row }
+    },
+
+    onCredSelect() {
+      const c = this.credentials.find(x => x.id === this.activeCred)
+      if (c) { this.credentialId = c.id; this.apiKey = c.api_key; this.save() }
+    },
+
+    async copyText(text, el) {
+      await navigator.clipboard.writeText(text)
+      const orig = el.textContent
+      el.textContent = '✓ Copied'; el.style.color = '#22c55e'
+      setTimeout(() => { el.textContent = orig; el.style.color = '' }, 1500)
+    },
+
+    envVars() {
+      const c = this.credentials.find(x => x.id === this.activeCred)
+      if (!c) return ''
+      return `PAYSTACK_FN_BASE=${this.url}/functions/v1\nPAYSTACK_CREDENTIAL_ID=${c.id}\nPAYSTACK_CREDENTIAL_KEY=${c.api_key}\nNEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${c.public_key}`
+    },
+
+    async call(key, fn, action, qp = {}, body = null) {
+      if (!this.credentialId || !this.apiKey) {
+        this.res = { ...this.res, [key]: { error: 'No credential selected. Pick one from the Active Credential dropdown in the top bar.' } }
+        return
+      }
+      if (!this.url) {
+        this.res = { ...this.res, [key]: { error: 'Supabase URL is not set.' } }
+        return
+      }
+      this.loading = { ...this.loading, [key]: true }
+      this.res = { ...this.res, [key]: null }
+      try {
+        const base = this.url.replace(/\/$/, '')
+        const u = new URL(`${base}/functions/v1/${fn}`)
+        u.searchParams.set('action', action)
+        for (const [k, v] of Object.entries(qp)) { if (v !== '' && v != null) u.searchParams.set(k, String(v)) }
+        const opts = { method: body ? 'POST' : 'GET', headers: this.fnH() }
+        if (body) opts.body = JSON.stringify(body)
+        const r = await fetch(u.toString(), opts)
+        const text = await r.text()
+        try { this.res = { ...this.res, [key]: JSON.parse(text) } }
+        catch { this.res = { ...this.res, [key]: { error: `Non-JSON response (${r.status}): ${text.slice(0, 300)}` } } }
+      } catch(e) { this.res = { ...this.res, [key]: { error: e.message } } }
+      this.loading = { ...this.loading, [key]: false }
+    },
+
+    // ── Transaction dispatcher ──────────────────────────────────────────────
+    txSend() {
+      const a = this.action.transactions
+      if (a==='initialize') {
+        const b = { email:this.f.tx_init.email, amount:Number(this.f.tx_init.amount), currency:this.f.tx_init.currency }
+        if (this.f.tx_init.reference) b.reference = this.f.tx_init.reference
+        if (this.f.tx_init.callback_url) b.callback_url = this.f.tx_init.callback_url
+        this.call('tx','paystack-transaction','initialize',{},b)
+      } else if (a==='verify') {
+        this.call('tx','paystack-transaction','verify',{reference:this.f.tx_verify.reference})
+      } else if (a==='list') {
+        this.call('tx','paystack-transaction','list',{perPage:this.f.tx_list.perPage,page:this.f.tx_list.page,status:this.f.tx_list.status,customer:this.f.tx_list.customer})
+      } else if (a==='fetch') {
+        this.call('tx','paystack-transaction','fetch',{id:this.f.tx_fetch.id})
+      } else if (a==='charge_auth') {
+        this.call('tx','paystack-transaction','charge_authorization',{},{email:this.f.tx_cauth.email,amount:Number(this.f.tx_cauth.amount),authorization_code:this.f.tx_cauth.authorization_code})
+      } else if (a==='check_auth') {
+        this.call('tx','paystack-transaction','check_authorization',{},{email:this.f.tx_cauth.email,amount:Number(this.f.tx_cauth.amount),authorization_code:this.f.tx_cauth.authorization_code})
+      } else if (a==='totals') {
+        this.call('tx','paystack-transaction','totals')
+      }
+    },
+
+    // ── Customer dispatcher ─────────────────────────────────────────────────
+    cuSend() {
+      const a = this.action.customers
+      if (a==='create') {
+        const b = { email:this.f.cu_create.email }
+        if (this.f.cu_create.first_name) b.first_name = this.f.cu_create.first_name
+        if (this.f.cu_create.last_name)  b.last_name  = this.f.cu_create.last_name
+        if (this.f.cu_create.phone)      b.phone      = this.f.cu_create.phone
+        this.call('cu','paystack-customer','create',{},b)
+      } else if (a==='fetch') {
+        this.call('cu','paystack-customer','fetch',{identifier:this.f.cu_fetch.identifier})
+      } else if (a==='list') {
+        this.call('cu','paystack-customer','list',{perPage:this.f.cu_list.perPage,page:this.f.cu_list.page})
+      } else if (a==='update') {
+        const b = {}
+        if (this.f.cu_update.first_name) b.first_name = this.f.cu_update.first_name
+        if (this.f.cu_update.last_name)  b.last_name  = this.f.cu_update.last_name
+        if (this.f.cu_update.phone)      b.phone      = this.f.cu_update.phone
+        this.call('cu','paystack-customer','update',{code:this.f.cu_update.code},b)
+      } else if (a==='set_risk_action') {
+        this.call('cu','paystack-customer','set_risk_action',{},{customer:this.f.cu_risk.customer,risk_action:this.f.cu_risk.risk_action})
+      }
+    },
+
+    // ── Plan dispatcher ─────────────────────────────────────────────────────
+    plSend() {
+      const a = this.action.plans
+      if (a==='create') {
+        this.call('pl','paystack-plan','create',{},{name:this.f.pl_create.name,interval:this.f.pl_create.interval,amount:Number(this.f.pl_create.amount),currency:this.f.pl_create.currency})
+      } else if (a==='list') {
+        this.call('pl','paystack-plan','list',{perPage:this.f.pl_list.perPage})
+      } else if (a==='fetch') {
+        this.call('pl','paystack-plan','fetch',{id:this.f.pl_fetch.id})
+      } else if (a==='update') {
+        const b = {}
+        if (this.f.pl_update.name)   b.name   = this.f.pl_update.name
+        if (this.f.pl_update.amount) b.amount  = Number(this.f.pl_update.amount)
+        this.call('pl','paystack-plan','update',{id:this.f.pl_update.id},b)
+      }
+    },
+
+    // ── Subscription dispatcher ─────────────────────────────────────────────
+    suSend() {
+      const a = this.action.subscriptions
+      if (a==='sub_create') {
+        const b = {customer:this.f.su_create.customer,plan:this.f.su_create.plan}
+        if (this.f.su_create.authorization) b.authorization = this.f.su_create.authorization
+        this.call('su','paystack-plan','sub_create',{},b)
+      } else if (a==='sub_fetch') {
+        this.call('su','paystack-plan','sub_fetch',{id:this.f.su_fetch.id})
+      } else if (a==='sub_list') {
+        this.call('su','paystack-plan','sub_list',{perPage:this.f.su_list.perPage,customer:this.f.su_list.customer})
+      } else if (a==='sub_enable') {
+        this.call('su','paystack-plan','sub_enable',{},{code:this.f.su_toggle.code,token:this.f.su_toggle.token})
+      } else if (a==='sub_disable') {
+        this.call('su','paystack-plan','sub_disable',{},{code:this.f.su_toggle.code,token:this.f.su_toggle.token})
+      } else if (a==='sub_manage_link') {
+        this.call('su','paystack-plan','sub_manage_link',{id:this.f.su_fetch.id})
+      }
+    },
+
+    // ── Transfer dispatcher ─────────────────────────────────────────────────
+    trSend() {
+      const a = this.action.transfers
+      if (a==='recipient_create') {
+        this.call('tr','paystack-transfer','recipient_create',{},{type:this.f.rc_create.type,name:this.f.rc_create.name,account_number:this.f.rc_create.account_number,bank_code:this.f.rc_create.bank_code,currency:this.f.rc_create.currency})
+      } else if (a==='recipient_list') {
+        this.call('tr','paystack-transfer','recipient_list',{perPage:this.f.rc_list.perPage})
+      } else if (a==='recipient_fetch') {
+        this.call('tr','paystack-transfer','recipient_fetch',{id:this.f.rc_fetch.id})
+      } else if (a==='initiate') {
+        this.call('tr','paystack-transfer','initiate',{},{source:'balance',amount:Number(this.f.tr_initiate.amount),recipient:this.f.tr_initiate.recipient,reason:this.f.tr_initiate.reason})
+      } else if (a==='finalize') {
+        this.call('tr','paystack-transfer','finalize',{},{transfer_code:this.f.tr_finalize.transfer_code,otp:this.f.tr_finalize.otp})
+      } else if (a==='list') {
+        this.call('tr','paystack-transfer','list',{perPage:this.f.tr_list.perPage})
+      } else if (a==='fetch') {
+        this.call('tr','paystack-transfer','fetch',{id:this.f.tr_fetch.id})
+      } else if (a==='verify') {
+        this.call('tr','paystack-transfer','verify',{reference:this.f.tr_verify.reference})
+      }
+    },
+
+    // ── Refund dispatcher ───────────────────────────────────────────────────
+    rfSend() {
+      const a = this.action.refunds
+      if (a==='create') {
+        const b = {transaction:this.f.rf_create.transaction}
+        if (this.f.rf_create.amount) b.amount = Number(this.f.rf_create.amount)
+        if (this.f.rf_create.customer_note) b.customer_note = this.f.rf_create.customer_note
+        if (this.f.rf_create.merchant_note) b.merchant_note = this.f.rf_create.merchant_note
+        this.call('rf','paystack-refund','create',{},b)
+      } else if (a==='list') {
+        this.call('rf','paystack-refund','list',{perPage:this.f.rf_list.perPage,from:this.f.rf_list.from,to:this.f.rf_list.to})
+      } else if (a==='fetch') {
+        this.call('rf','paystack-refund','fetch',{id:this.f.rf_fetch.id})
+      }
+    },
+
+    // ── Charge dispatcher ───────────────────────────────────────────────────
+    chSend() {
+      const a = this.action.charge
+      if (a==='charge') {
+        this.call('ch','paystack-charge','charge',{},{
+          email:this.f.ch_charge.email,
+          amount:Number(this.f.ch_charge.amount),
+          card:{number:this.f.ch_charge.card_number,cvv:this.f.ch_charge.cvv,expiry_month:this.f.ch_charge.expiry_month,expiry_year:this.f.ch_charge.expiry_year}
+        })
+      } else if (a==='submit_pin') {
+        this.call('ch','paystack-charge','submit_pin',{},{pin:this.f.ch_pin.pin,reference:this.f.ch_pin.reference})
+      } else if (a==='submit_otp') {
+        this.call('ch','paystack-charge','submit_otp',{},{otp:this.f.ch_otp.otp,reference:this.f.ch_otp.reference})
+      } else if (a==='submit_phone') {
+        this.call('ch','paystack-charge','submit_phone',{},{phone:this.f.ch_phone.phone,reference:this.f.ch_phone.reference})
+      } else if (a==='submit_birthday') {
+        this.call('ch','paystack-charge','submit_birthday',{},{birthday:this.f.ch_birthday.birthday,reference:this.f.ch_birthday.reference})
+      } else if (a==='check') {
+        this.call('ch','paystack-charge','check',{reference:this.f.ch_check.reference})
+      }
+    },
+
+    // ── Misc dispatcher ─────────────────────────────────────────────────────
+    mxSend() {
+      const a = this.action.misc
+      if (a==='list_banks') {
+        this.call('mx','paystack-misc','list_banks',{country:this.f.mx_banks.country})
+      } else if (a==='list_countries') {
+        this.call('mx','paystack-misc','list_countries')
+      } else if (a==='resolve_account') {
+        this.call('mx','paystack-misc','resolve_account',{account_number:this.f.mx_resolve.account_number,bank_code:this.f.mx_resolve.bank_code})
+      } else if (a==='list_states') {
+        this.call('mx','paystack-misc','list_states',{country:this.f.mx_states.country})
+      } else if (a==='list_currencies') {
+        this.call('mx','paystack-misc','list_currencies')
+      }
+    },
+
+    // ── JSON formatter ──────────────────────────────────────────────────────
+    fmt(obj) {
+      if (!obj) return ''
+      return JSON.stringify(obj, null, 2).replace(
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        m => {
+          let c = 'json-num'
+          if (/^"/.test(m)) c = /:$/.test(m) ? 'json-key' : 'json-str'
+          else if (/true|false/.test(m)) c = 'json-bool'
+          else if (/null/.test(m)) c = 'json-null'
+          return `<span class="${c}">${m}</span>`
+        }
+      )
+    },
+  }
+}
+</script>
+</body>
+</html>
